@@ -11013,6 +11013,7 @@ void arm_cpu_do_interrupt(CPUState *cs)
     assert(!arm_feature(env, ARM_FEATURE_M));
 
     arm_log_exception(cs);
+    qemu_log_mask(CPU_LOG_INT, "...PC before jump: %lx\n", env->pc);
     qemu_log_mask(CPU_LOG_INT, "...from EL%d to EL%d\n", arm_current_el(env),
                   new_el);
     if (qemu_loglevel_mask(CPU_LOG_INT)
