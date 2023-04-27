@@ -1,2 +1,9 @@
 target remote :1234
+# vbar_el2 + 0x200 (Same EL, sync)
 b *0x80093200
+# faulting function
+b *0x8005e32c 
+#faulting insn
+b *0x8005e384
+#first smc
+b *0x80041a4c
