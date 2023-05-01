@@ -7,3 +7,7 @@ b *0x8005e32c
 b *0x8005e384
 #first smc
 b *0x80041a4c
+#right after getting magic
+b *0x80058488
+#find_property
+b *0x80057f60

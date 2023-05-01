@@ -951,6 +951,17 @@ cpu_exec_loop(CPUState *cpu, SyncClocks *sc)
 
             cpu_get_tb_cpu_state(cpu->env_ptr, &pc, &cs_base, &flags);
 
+            
+            if(pc == 0x80058484){ /*right after getting the magic*/
+                qemu_log("Writing 0x6008 magic\n");
+                unsigned short DAL_magic = 0x6008;
+                if(!cpu_memory_rw_debug(cpu, 0x801d421a, &DAL_magic, sizeof(DAL_magic), true)){
+                    qemu_log("Wrote DAL_magic\n");
+                }else{
+                    qemu_log("Failed to write DAL_magic\n");
+                }
+            }
+
             /*
              * When requested, use an exact setting for cflags for the next
              * execution.  This is used for icount, precise smc, and stop-
