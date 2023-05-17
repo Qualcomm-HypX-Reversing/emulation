@@ -180,4 +180,7 @@ config AXP209_PMU
     bool
     depends on I2C
 
+config QCOM_SMEM
+    bool
+
 source macio/Kconfig

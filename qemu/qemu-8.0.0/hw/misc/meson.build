@@ -16,6 +16,7 @@ softmmu_ss.add(when: 'CONFIG_INTEGRATOR_DEBUG', if_true: files('arm_integrator_d
 softmmu_ss.add(when: 'CONFIG_A9SCU', if_true: files('a9scu.c'))
 softmmu_ss.add(when: 'CONFIG_ARM11SCU', if_true: files('arm11scu.c'))
 
+
 softmmu_ss.add(when: 'CONFIG_ARM_V7M', if_true: files('armv7m_ras.c'))
 
 # Mac devices
@@ -141,3 +142,6 @@ softmmu_ss.add(when: 'CONFIG_SBSA_REF', if_true: files('sbsa_ec.c'))
 
 # HPPA devices
 softmmu_ss.add(when: 'CONFIG_LASI', if_true: files('lasi.c'))
+
+#QCOM SMEM
+softmmu_ss.add(when: 'CONFIG_QCOM_SMEM', if_true: files('qcom_smem.c'))
