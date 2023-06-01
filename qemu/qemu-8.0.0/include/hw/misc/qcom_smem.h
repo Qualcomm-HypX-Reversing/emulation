@@ -23,10 +23,27 @@
 #endif
 
 
+#define NUM_CPU 1 //this can be changed as needed
+
+#define PAGE_SHIFT 12
+#define PAGE_SIZE 4096
+
 #define QCOM_SMEM_REGION_BASE 0x1fd5000L 
-#define SMEM_PARTITION_NUM 0x10
-#define QCOM_SMEM_REGION_SIZE ALIGN(sizeof(struct smem_header), 0x1000) + SMEM_PARTITION_NUM*0x1000 + 0x1000 //page aligned smem_header + 1 page for each partition entries + 0x1000 for part table 
-#define QCOM_PTABLE_OFF QCOM_SMEM_REGION_SIZE - 0x1000 //reversed
+/*
+#if NUM_CPU > 1
+#define SMEM_PARTITION_NUM NUM_CPU*(NUM_CPU-1) //we need communication between each CPU
+#else
+#define SMEM_PARTITION_NUM 1 //we need at least 1
+#endif
+*/
+
+#define SMEM_PARTITION_NUM 0 
+
+#define PARTITION_SIZE PAGE_SIZE
+#define QCOM_ALIGN_SMEM_HEADER_SIZE ALIGN(sizeof(struct smem_header), PAGE_SIZE)
+#define QCOM_SMEM_REGION_SIZE QCOM_ALIGN_SMEM_HEADER_SIZE + SMEM_PARTITION_NUM*PARTITION_SIZE + 0x1000 //page aligned smem_header + 1 page for each partition entries + 0x1000 for part table 
+#define QCOM_PTABLE_OFF QCOM_SMEM_REGION_SIZE - 0x1000 
+
 
 #define QCOM_SMEM_NAME "qcom-smem"
 #define TYPE_QCOM_SMEM "qcom-smem-type"
@@ -65,7 +82,7 @@ struct smem_info {
 	__le64 num_items;
 };
 
-static const u8 SMEM_INFO_MAGIC[] = { 0x53, 0x49, 0x49, 0x49 }; /* SIII */
+#define SMEM_INFO_MAGIC { 0x53, 0x49, 0x49, 0x49 } /* SIII */
 
 
 
@@ -93,7 +110,7 @@ struct smem_partition_header {
 	__le32 reserved[3];
 };
 
-static const u8 SMEM_PART_MAGIC[] = { 0x24, 0x50, 0x52, 0x54 };
+static const u8 SMEM_PART_MAGIC[] = { 0x24, 0x50, 0x52, 0x54 }; //$PRT
 
 
 /**
@@ -200,15 +217,18 @@ if header->version[SMEM_MASTER_SBL_VERSION_INDEX] == LEGACY_ALLOCATOR then use t
 if header->version[SMEM_MASTER_SBL_VERSION_INDEX] == MODERN_ALLOCATOR then use the modern allocator 
 */
 #define SMEM_MASTER_SBL_VERSION_INDEX 7
-#define LEGACY_ALLOCATOR 0xb0000
-#define MODERN_ALLOCATOR  0xc0000
+#define SMEM_GLOBAL_HEAP_VERSION	11
+#define SMEM_GLOBAL_PART_VERSION	12
+
+#define SMEM_GLOBAL_HEAP_VERNUM SMEM_GLOBAL_HEAP_VERSION << 12
+#define SMEM_GLOBAL_PART_VERNUM  SMEM_GLOBAL_PART_VERSION << 12 
 
 
 static struct smem_info smem_info = {
-	.magic = { 0x53, 0x49, 0x49, 0x49 },
+	.magic = SMEM_INFO_MAGIC,
 	.size = QCOM_SMEM_REGION_SIZE,
 	.base_addr = QCOM_SMEM_REGION_BASE,
-	.num_items = SMEM_PARTITION_NUM,
+	.num_items = 0,
 };
 
 

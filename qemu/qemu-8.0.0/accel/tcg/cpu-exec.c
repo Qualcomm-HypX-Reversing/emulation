@@ -43,6 +43,7 @@
 #include "tb-hash.h"
 #include "tb-context.h"
 #include "internal.h"
+#include "exec/pc_global.h"
 
 /* -icount align implementation. */
 
@@ -934,6 +935,8 @@ static inline void cpu_loop_exec_tb(CPUState *cpu, TranslationBlock *tb,
 
 /* main execution loop */
 
+target_ulong pc_global;
+
 static int __attribute__((noinline))
 cpu_exec_loop(CPUState *cpu, SyncClocks *sc)
 {
@@ -950,7 +953,7 @@ cpu_exec_loop(CPUState *cpu, SyncClocks *sc)
             uint32_t flags, cflags;
 
             cpu_get_tb_cpu_state(cpu->env_ptr, &pc, &cs_base, &flags);
-
+            
             
             if(pc == 0x80058484){ /*right after getting the magic*/
                 qemu_log("Writing 0x6008 magic\n");
@@ -961,6 +964,8 @@ cpu_exec_loop(CPUState *cpu, SyncClocks *sc)
                     qemu_log("Failed to write DAL_magic\n");
                 }
             }
+
+            pc_global = pc; //set pc_global for debugging purposes
 
             /*
              * When requested, use an exact setting for cflags for the next

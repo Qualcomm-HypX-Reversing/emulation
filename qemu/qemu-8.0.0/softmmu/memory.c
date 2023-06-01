@@ -34,6 +34,7 @@
 #include "hw/boards.h"
 #include "migration/vmstate.h"
 #include "exec/address-spaces.h"
+#include "exec/pc_global.h"
 
 //#define DEBUG_UNASSIGNED
 
@@ -1383,7 +1384,7 @@ bool memory_region_access_valid(MemoryRegion *mr,
                       ", size %u, region '%s', reason: rejected\n",
                       is_write ? "write" : "read",
                       addr, size, memory_region_name(mr));
-        return false;
+        goto err_print_pc;
     }
 
     if (!mr->ops->valid.unaligned && (addr & (size - 1))) {
@@ -1391,7 +1392,7 @@ bool memory_region_access_valid(MemoryRegion *mr,
                       ", size %u, region '%s', reason: unaligned\n",
                       is_write ? "write" : "read",
                       addr, size, memory_region_name(mr));
-        return false;
+        goto err_print_pc;
     }
 
     /* Treat zero as compatibility all valid */
@@ -1408,9 +1409,14 @@ bool memory_region_access_valid(MemoryRegion *mr,
                       addr, size, memory_region_name(mr),
                       mr->ops->valid.min_access_size,
                       mr->ops->valid.max_access_size);
-        return false;
+        goto err_print_pc;
     }
     return true;
+
+err_print_pc:
+    qemu_log_mask(LOG_GUEST_ERROR, "Invalid memory access occured somewhere around PC: %lx\n", (long unsigned int)pc_global);
+    return false;
+    
 }
 
 static MemTxResult memory_region_dispatch_read1(MemoryRegion *mr,

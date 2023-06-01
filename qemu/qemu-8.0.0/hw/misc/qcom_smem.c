@@ -21,12 +21,51 @@ static uint64_t read_smem_region(void* opaque, hwaddr addr, unsigned size);
 
 
 static uint64_t read_smem_region(void* opaque, hwaddr addr, unsigned size){
-    qemu_log("SMEM read from: %lx\n", addr);
+
+
+
+    struct QcomSmemState* qss = (struct QcomSmemState*)opaque;
+    void* smem_region = qss->smem_region;
+
+    switch(size){
+            case 8:
+                 return *(uint64_t*)(smem_region + addr);
+            case 4:
+                return *(uint32_t*)(smem_region + addr);
+            case 2:
+                return *(uint16_t*)(smem_region + addr);
+            case 1: 
+            return *(uint8_t*)(smem_region + addr);
+        }
+
+
+    qemu_log("SMEM read from offset: %lx\n", addr);
+    
     return 0;
 }
 
 static void  write_smem_region(void* opaque, hwaddr addr, uint64_t data, unsigned size){
-    qemu_log("SMEM write to: %lx\n", addr);
+        struct QcomSmemState* qss = (struct QcomSmemState*)opaque;
+    void* smem_region = qss->smem_region;
+
+    switch(size){
+            case 8:
+                *(uint64_t*)(smem_region + addr) = data;
+                break;
+            case 4:
+                *(uint32_t*)(smem_region + addr) = (uint32_t)data;
+                break;
+            case 2:
+                *(uint16_t*)(smem_region + addr) = (uint16_t)data;
+                break;
+            case 1: 
+                *(uint8_t*)(smem_region + addr) = (uint8_t)data;
+                break;
+        }
+
+
+    qemu_log("SMEM write to offset: %lx\n", addr);
+    
 }
 
 static const MemoryRegionOps smem_region_ops = {
@@ -53,11 +92,11 @@ static uint64_t read_info_reg(void* opaque, hwaddr addr, unsigned size){
             case 8:
                  return *(uint64_t*)(((char*)&smem_info) + addr - SMEM_INFO_STRUCT_ADDR);
             case 4:
-                return (uint64_t)*(uint32_t*)(((char*)&smem_info) + addr - SMEM_INFO_STRUCT_ADDR);
+                return *(uint32_t*)(((char*)&smem_info) + addr - SMEM_INFO_STRUCT_ADDR);
             case 2:
-                return (uint64_t)*(uint16_t*)(((char*)&smem_info) + addr - SMEM_INFO_STRUCT_ADDR);
+                return *(uint16_t*)(((char*)&smem_info) + addr - SMEM_INFO_STRUCT_ADDR);
             case 1: 
-            return (uint64_t)*(uint8_t*)(((char*)&smem_info) + addr - SMEM_INFO_STRUCT_ADDR);
+            return *(uint8_t*)(((char*)&smem_info) + addr - SMEM_INFO_STRUCT_ADDR);
         }
     }
 
@@ -73,20 +112,53 @@ static const MemoryRegionOps smem_info_region_ops = {
 
 
 static int setup_smem_header(struct smem_header* header){
-    header -> version[SMEM_MASTER_SBL_VERSION_INDEX] = MODERN_ALLOCATOR; //use the modern allocator
+    header -> version[SMEM_MASTER_SBL_VERSION_INDEX] = SMEM_GLOBAL_HEAP_VERNUM; //use the heap version because fuck that
     header -> initialized = 1; //the driver will straight panic if we don't do this.
     return 0;
 }
 
-static int setup_partitions(void* smem_region, struct smem_ptable* ptable){
+static void setup_partition_header(struct smem_partition_header* pheader, uint16_t host0, uint16_t host1){
+    memcpy(&pheader->magic, SMEM_PART_MAGIC, sizeof(SMEM_PART_MAGIC));
+    pheader->host0 = (__le16)host0;
+    pheader->host1 = (__le16)host1;
+    pheader->offset_free_uncached = (__le32)sizeof(struct smem_partition_header); 
+    pheader->offset_free_cached = (__le32)(PARTITION_SIZE-0x20);
+    pheader->size = PARTITION_SIZE;
+}
+
+static int setup_partitions(void* smem_region){
+
+    struct smem_ptable* ptable = (struct smem_ptable*)(smem_region + QCOM_PTABLE_OFF);
     memcpy(&ptable->magic, SMEM_PTABLE_MAGIC, sizeof(SMEM_PTABLE_MAGIC));
-
     ptable->num_entries = SMEM_PARTITION_NUM;
-    for(int i = 0; i<SMEM_PARTITION_NUM; i++){
-        //memcpy(&ptable->entry[i].magic, SMEM_PART_MAGIC, sizeof(SMEM_PART_MAGIC)); //copy the magic
-        
+    ptable->version = 1;
 
+
+#if NUM_CPU > 1
+    int pcount = 0;
+    for(int i = 0; i<NUM_CPU; i++){
+        for(int j = 0; j<NUM_CPU; j++){
+            if(i == j){ 
+                continue;
+            }
+            struct smem_ptable_entry* ent = &ptable->entry[pcount++];
+            ent->offset = (i << PAGE_SHIFT) + QCOM_ALIGN_SMEM_HEADER_SIZE;
+            ent->size = PARTITION_SIZE;
+            
+            setup_partition_header((struct smem_partition_header*) (smem_region + ent->offset), i, j);
+        }
     }
+#else
+    struct smem_ptable_entry* ent = &ptable->entry[0]; //there is only 1 entry if we only have 1 CPU
+    ent -> offset = QCOM_ALIGN_SMEM_HEADER_SIZE;
+    ent -> size = PARTITION_SIZE;
+    
+    setup_partition_header((struct smem_partition_header*) (smem_region + ent->offset), 0, 0);
+
+#endif
+   
+
+
 
     return 0;
 }
@@ -94,6 +166,11 @@ static int setup_partitions(void* smem_region, struct smem_ptable* ptable){
 static int setup_smem_region(void* smem_region){
     if(setup_smem_header((struct smem_header*)smem_region)){
         qemu_log_mask(LOG_GUEST_ERROR, "Failed to setup smem_header\n");
+        return -1;
+    }
+
+    if(setup_partitions(smem_region)){
+        qemu_log_mask(LOG_GUEST_ERROR, "Failed to setup smem_region\n");
     }
 
     return 0;
@@ -107,6 +184,10 @@ static void qcom_smem_realize(DeviceState *dev, Error **errp){
     qss->smem_region = g_malloc0(QCOM_SMEM_REGION_SIZE);
     if(!qss->smem_region){
         qemu_log_mask(LOG_GUEST_ERROR, "Failed to create smem_region\n");
+        return;
+    }
+
+    if(setup_smem_region(qss->smem_region)){
         return;
     }
 

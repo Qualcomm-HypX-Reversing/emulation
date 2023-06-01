@@ -9,6 +9,8 @@ b *0x8005e384
 b *0x80041a4c
 #find_property
 #b *0x80057f60
+#smem_error_function
+b *0x800749e0
 
 #for easy log access during debugging
 set $log=0x80209200 
