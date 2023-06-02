@@ -1,7 +1,7 @@
 ENTRY(_Reset)
 SECTIONS
 {
-    . = 0x6942000000; /* funny */
+    . = 0x69420000; /* funny */
     .text : { *(.text) }
     .data : { *(.data) }
     .bss : { *(.bss COMMON) }

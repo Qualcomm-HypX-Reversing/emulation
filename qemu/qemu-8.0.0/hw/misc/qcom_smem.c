@@ -190,7 +190,7 @@ static int setup_RAM_ptable(void){
         return -1;
     }
 
-    ram_ptable -> magic[0] = 0xaabbccdd; //do the wrong magic
+    ram_ptable -> magic[0] = 0xaabbccdd; //do an invalid magic to have it skip this RAM ptable code
     ram_ptable -> magic[1] = 0x11223344;
 
 
