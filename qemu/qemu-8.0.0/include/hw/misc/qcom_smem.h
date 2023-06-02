@@ -9,7 +9,9 @@
 #include "hw/qdev-core.h"
 
 
-//Various types for QCOM SMEM
+//This header contains various types for QCOM SMEM
+
+
 //https://android.googlesource.com/kernel/msm/+/android-msm-bluecross-4.9-pie-dr1-release/arch/arm64/boot/dts/qcom/sdm845.dtsi#2151 
 #define SMEM_INFO_REG_LO 0x1fd4000L //these registers give a pointer to the smem_info structure
 #define SMEM_INFO_REG_HI 0x1fd4004L 
@@ -23,7 +25,6 @@
 #endif
 
 
-#define NUM_CPU 1 //this can be changed as needed
 
 #define PAGE_SHIFT 12
 #define PAGE_SIZE 4096
@@ -37,12 +38,14 @@
 #endif
 */
 
-#define SMEM_PARTITION_NUM 0 
+#define SMEM_PARTITION_NUM 1 //the only partition is global partition
 
-#define PARTITION_SIZE PAGE_SIZE
+#define PARTITION_SIZE 0x10000
 #define QCOM_ALIGN_SMEM_HEADER_SIZE ALIGN(sizeof(struct smem_header), PAGE_SIZE)
 #define QCOM_SMEM_REGION_SIZE QCOM_ALIGN_SMEM_HEADER_SIZE + SMEM_PARTITION_NUM*PARTITION_SIZE + 0x1000 //page aligned smem_header + 1 page for each partition entries + 0x1000 for part table 
 #define QCOM_PTABLE_OFF QCOM_SMEM_REGION_SIZE - 0x1000 
+
+#define SMEM_GLOBAL_HOST	0xfffe
 
 
 #define QCOM_SMEM_NAME "qcom-smem"
@@ -208,6 +211,27 @@ struct smem_header {
 	__le32 reserved;
 	struct smem_global_entry toc[SMEM_ITEM_COUNT];
 };
+
+
+/**
+ * struct smem_private_entry - header of each item in the private partition
+ * @canary:	magic number, must be SMEM_PRIVATE_CANARY
+ * @item:	identifying number of the smem item
+ * @size:	size of the data, including padding bytes
+ * @padding_data: number of bytes of padding of data
+ * @padding_hdr: number of bytes of padding between the header and the data
+ * @reserved:	for now reserved entry
+ */
+struct smem_private_entry {
+	__le16 canary; /* bytes are the same so no swapping needed */
+	__le16 item;
+	__le32 size; /* includes padding bytes */
+	__le16 padding_data;
+	__le16 padding_hdr;
+	__le32 reserved;
+};
+#define SMEM_PRIVATE_CANARY	0xa5a5
+
 
 
 /*

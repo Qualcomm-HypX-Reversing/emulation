@@ -7,6 +7,7 @@
 #include "hw/misc/qcom_smem.h"
 #include "exec/address-spaces.h"
 #include "hw/qdev-core.h"
+#include "hw/misc/qcom_ram_ptable.h"
 
 
 static void qcom_smem_realize(DeviceState *dev, Error **errp);
@@ -14,9 +15,11 @@ static void qcom_smem_class_init(ObjectClass* klass, void* data);
 static void init_qcom_smem_types(void);
 static uint64_t read_info_reg(void* opaque, hwaddr addr, unsigned size);
 static uint64_t read_smem_region(void* opaque, hwaddr addr, unsigned size);
+static void* smem_alloc(int item, size_t size);
+static int setup_RAM_ptable(void);
 
 
-
+static struct smem_partition_header* global_part_ptr;
 
 
 
@@ -112,18 +115,49 @@ static const MemoryRegionOps smem_info_region_ops = {
 
 
 static int setup_smem_header(struct smem_header* header){
-    header -> version[SMEM_MASTER_SBL_VERSION_INDEX] = SMEM_GLOBAL_HEAP_VERNUM; //use the heap version because fuck that
+    header -> version[SMEM_MASTER_SBL_VERSION_INDEX] = SMEM_GLOBAL_PART_VERNUM; //use the heap version because fuck that
     header -> initialized = 1; //the driver will straight panic if we don't do this.
     return 0;
 }
 
+
+
+//I am not checking for existing items. That's up to the developer.
+static void* smem_alloc(int item, size_t size){
+    struct smem_private_entry* next_free = (struct smem_private_entry*)((void*)global_part_ptr + global_part_ptr -> offset_free_uncached);
+
+    __le32 region_size = (__le32)ALIGN(size,8);
+
+    if(global_part_ptr -> offset_free_uncached + sizeof(*next_free) + region_size > global_part_ptr -> offset_free_cached)
+        return NULL;
+
+    next_free -> canary = SMEM_PRIVATE_CANARY;
+    next_free -> size = region_size;
+    next_free -> padding_data = (__le16)(next_free->size - size);
+    next_free -> padding_hdr = 0;
+    next_free -> item = item;
+
+    global_part_ptr -> offset_free_uncached += sizeof(*next_free) + next_free -> size;
+
+    return (void*)(++next_free);
+    
+}
+
+
+/*
+This function sets up an empty partition
+*/
 static void setup_partition_header(struct smem_partition_header* pheader, uint16_t host0, uint16_t host1){
     memcpy(&pheader->magic, SMEM_PART_MAGIC, sizeof(SMEM_PART_MAGIC));
     pheader->host0 = (__le16)host0;
     pheader->host1 = (__le16)host1;
     pheader->offset_free_uncached = (__le32)sizeof(struct smem_partition_header); 
-    pheader->offset_free_cached = (__le32)(PARTITION_SIZE-0x20);
+    pheader->offset_free_cached = PARTITION_SIZE;
     pheader->size = PARTITION_SIZE;
+
+    global_part_ptr = pheader;
+    
+
 }
 
 static int setup_partitions(void* smem_region){
@@ -134,29 +168,31 @@ static int setup_partitions(void* smem_region){
     ptable->version = 1;
 
 
-#if NUM_CPU > 1
-    int pcount = 0;
-    for(int i = 0; i<NUM_CPU; i++){
-        for(int j = 0; j<NUM_CPU; j++){
-            if(i == j){ 
-                continue;
-            }
-            struct smem_ptable_entry* ent = &ptable->entry[pcount++];
-            ent->offset = (i << PAGE_SHIFT) + QCOM_ALIGN_SMEM_HEADER_SIZE;
-            ent->size = PARTITION_SIZE;
-            
-            setup_partition_header((struct smem_partition_header*) (smem_region + ent->offset), i, j);
-        }
-    }
-#else
+
     struct smem_ptable_entry* ent = &ptable->entry[0]; //there is only 1 entry if we only have 1 CPU
     ent -> offset = QCOM_ALIGN_SMEM_HEADER_SIZE;
     ent -> size = PARTITION_SIZE;
+    ent -> host0 = SMEM_GLOBAL_HOST;
+    ent -> host1 = SMEM_GLOBAL_HOST;
+    ent -> cacheline = 1; // I don't want to deal with alignment
     
-    setup_partition_header((struct smem_partition_header*) (smem_region + ent->offset), 0, 0);
+    setup_partition_header((struct smem_partition_header*) (smem_region + ent->offset), SMEM_GLOBAL_HOST, SMEM_GLOBAL_HOST);
 
-#endif
-   
+    return 0;
+}
+
+
+static int setup_RAM_ptable(void){
+    struct smem_ram_ptable* ram_ptable = smem_alloc(RAM_PTABLE_ITEM_NUMBER, sizeof(struct smem_ram_ptable));
+
+    if(!ram_ptable){
+        qemu_log_mask(LOG_GUEST_ERROR, "Failed to allocate a RAM ptable area\n");
+        return -1;
+    }
+
+    ram_ptable -> magic[0] = 0xaabbccdd; //do the wrong magic
+    ram_ptable -> magic[1] = 0x11223344;
+
 
 
 
@@ -171,12 +207,14 @@ static int setup_smem_region(void* smem_region){
 
     if(setup_partitions(smem_region)){
         qemu_log_mask(LOG_GUEST_ERROR, "Failed to setup smem_region\n");
+        return -1;
+    }
+
+    if(setup_RAM_ptable()){
+        return -1;
     }
 
     return 0;
-
-    
-
 }
 
 static void qcom_smem_realize(DeviceState *dev, Error **errp){

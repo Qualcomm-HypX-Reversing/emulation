@@ -2,18 +2,34 @@ target remote :1234
 # vbar_el2 + 0x200 (Same EL, sync)
 b *0x80093200
 # faulting function
-b *0x8005e32c 
+#b *0x8005e32c 
 #faulting insn
-b *0x8005e384
+#b *0x8005e384
 #first smc
-b *0x80041a4c
+#b *0x80041a4c
 #find_property
 #b *0x80057f60
 #smem_error_function
 b *0x800749e0
 
+
+
+#print
+
+#before if statement in main
+#b *0x80040134
+
+
+
 #for easy log access during debugging
 set $log=0x80209200 
+
+
+define goto_rkp
+    set $pc=0x8000ce68
+    set $x0=0xc300c000
+    set $x1=0
+end
 
 define print_log
     printf "%s", $log
