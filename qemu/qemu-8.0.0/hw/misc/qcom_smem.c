@@ -156,8 +156,6 @@ static void setup_partition_header(struct smem_partition_header* pheader, uint16
     pheader->size = PARTITION_SIZE;
 
     global_part_ptr = pheader;
-    
-
 }
 
 static int setup_partitions(void* smem_region){
