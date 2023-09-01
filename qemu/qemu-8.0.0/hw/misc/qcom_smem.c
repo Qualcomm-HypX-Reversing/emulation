@@ -151,8 +151,8 @@ static void setup_partition_header(struct smem_partition_header* pheader, uint16
     memcpy(&pheader->magic, SMEM_PART_MAGIC, sizeof(SMEM_PART_MAGIC));
     pheader->host0 = (__le16)host0;
     pheader->host1 = (__le16)host1;
-    pheader->offset_free_uncached = (__le32)sizeof(struct smem_partition_header); 
-    pheader->offset_free_cached = PARTITION_SIZE;
+    pheader->offset_free_uncached = (__le32)sizeof(struct smem_partition_header); //set it to start of data within the parition
+    pheader->offset_free_cached = PARTITION_SIZE; //set offset free cached to end of partiton
     pheader->size = PARTITION_SIZE;
 
     global_part_ptr = pheader;

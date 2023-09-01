@@ -29,7 +29,7 @@
 #define PAGE_SHIFT 12
 #define PAGE_SIZE 4096
 
-#define QCOM_SMEM_REGION_BASE 0x1fd5000L 
+#define QCOM_SMEM_REGION_BASE 0x2fd5000L //make if far away from the original region because the pages in that region is somewhat contested. 
 /*
 #if NUM_CPU > 1
 #define SMEM_PARTITION_NUM NUM_CPU*(NUM_CPU-1) //we need communication between each CPU

@@ -2018,6 +2018,40 @@ static void virt_cpu_post_init(VirtMachineState *vms, MemoryRegion *sysmem)
     }
 }
 
+
+#define UNK_BASE 0x01fc8000
+#define UNK_REGION_SIZE 0x1000 //1 pages because why not
+#define UNK_BASE2 0x1f49000
+#define UNK_REGION2_SIZE 0x1000
+#define CLOCK_REGION_BASE 0x17c000
+#define CLOCK_REGION_SIZE 0x1000
+#define CLOCK_REGION_BASE2 0x3d92000
+
+/*
+This function supports creating anonymous s2 mappings for regions that the qualcomm SoC needs. 
+*/
+static void create_qualcomm_soc_regions(void){
+    MemoryRegion* mr = g_malloc0(sizeof(*mr));
+    Error* e = 0;
+    memory_region_init_ram(mr, NULL, "unk_region", UNK_REGION_SIZE, &e);
+    memory_region_add_subregion(get_system_memory(), UNK_BASE, mr);
+
+    mr = g_malloc0(sizeof(*mr));
+    memory_region_init_ram(mr, NULL, "unk_region2", UNK_REGION2_SIZE, &e);
+    memory_region_add_subregion(get_system_memory(), UNK_BASE2, mr);
+
+    mr = g_malloc(sizeof(*mr));
+    memory_region_init_ram(mr, NULL, "clock_region", CLOCK_REGION_SIZE, &e);
+    memory_region_add_subregion(get_system_memory(), CLOCK_REGION_BASE, mr);
+
+    mr = g_malloc(sizeof(*mr));
+    memory_region_init_ram(mr, NULL, "clock_region2", CLOCK_REGION_SIZE, &e);
+    memory_region_add_subregion(get_system_memory(), CLOCK_REGION_BASE2, mr);
+    
+}
+
+
+
 static void machvirt_init(MachineState *machine)
 {
     VirtMachineState *vms = VIRT_MACHINE(machine);
@@ -2325,6 +2359,8 @@ static void machvirt_init(MachineState *machine)
                                arm_virt_nvdimm_acpi_dsmio,
                                vms->fw_cfg, OBJECT(vms));
     }
+
+    create_qualcomm_soc_regions();
 
     vms->bootinfo.ram_size = machine->ram_size;
     vms->bootinfo.board_id = -1;

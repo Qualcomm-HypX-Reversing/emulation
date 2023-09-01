@@ -1,4 +1,4 @@
-target remote :1234
+target remote localhost:1234
 # vbar_el2 + 0x200 (Same EL, sync)
 b *0x80093200
 # faulting function
@@ -10,27 +10,18 @@ b *0x80093200
 #find_property
 #b *0x80057f60
 #smem_error_function
-b *0x800749e0
 
+#return from first smc
+#b *0x800435f0 
 
+#b *0x80063b40
 
-#print
-
-#before if statement in main
-#b *0x80040134
-
-
-
-#for easy log access during debugging
 set $log=0x80209200 
-
-
 define goto_rkp
     set $pc=0x8000ce68
     set $x0=0xc300c000
     set $x1=0
 end
-
 define print_log
     printf "%s", $log
 end
