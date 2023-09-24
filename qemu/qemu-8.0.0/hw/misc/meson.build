@@ -145,3 +145,6 @@ softmmu_ss.add(when: 'CONFIG_LASI', if_true: files('lasi.c'))
 
 #QCOM SMEM
 softmmu_ss.add(when: 'CONFIG_QCOM_SMEM', if_true: files('qcom_smem.c'))
+
+#QCOM MISC
+softmmu_ss.add(when: 'CONFIG_QCOM_MISC', if_true: files('qcom_misc.c'))

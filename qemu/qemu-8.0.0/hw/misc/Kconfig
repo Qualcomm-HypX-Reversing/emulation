@@ -183,4 +183,7 @@ config AXP209_PMU
 config QCOM_SMEM
     bool
 
+config QCOM_MISC
+    bool
+
 source macio/Kconfig

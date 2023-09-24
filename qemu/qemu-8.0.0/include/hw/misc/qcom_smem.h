@@ -15,8 +15,8 @@
 //https://android.googlesource.com/kernel/msm/+/android-msm-bluecross-4.9-pie-dr1-release/arch/arm64/boot/dts/qcom/sdm845.dtsi#2151 
 #define SMEM_INFO_REG_LO 0x1fd4000L //these registers give a pointer to the smem_info structure
 #define SMEM_INFO_REG_HI 0x1fd4004L 
-#define SMEM_INFO_STRUCT_ADDR 0x1fd4010L //16 byte align it so we don't face any weird alignment issues
-#define QCOM_INFO_REGION_SIZE 0x1000L
+#define SMEM_INFO_STRUCT_ADDR 0x80aff230L //
+#define QCOM_INFO_REGION_SIZE sizeof(struct smem_info)
 #define QCOM_INFO_REGION_BASE SMEM_INFO_REG_LO
 
 
@@ -29,27 +29,13 @@
 #define PAGE_SHIFT 12
 #define PAGE_SIZE 4096
 
-#define QCOM_SMEM_REGION_BASE 0x2fd5000L //make if far away from the original region because the pages in that region is somewhat contested. 
-/*
-#if NUM_CPU > 1
-#define SMEM_PARTITION_NUM NUM_CPU*(NUM_CPU-1) //we need communication between each CPU
-#else
-#define SMEM_PARTITION_NUM 1 //we need at least 1
-#endif
-*/
+#define QCOM_SMEM_REGION_BASE 0x80900000L 
 
-#define SMEM_PARTITION_NUM 1 //the only partition is global partition
-
-#define PARTITION_SIZE 0x10000
-#define QCOM_ALIGN_SMEM_HEADER_SIZE ALIGN(sizeof(struct smem_header), PAGE_SIZE)
-#define QCOM_SMEM_REGION_SIZE QCOM_ALIGN_SMEM_HEADER_SIZE + SMEM_PARTITION_NUM*PARTITION_SIZE + 0x1000 //page aligned smem_header + 1 page for each partition entries + 0x1000 for part table 
-#define QCOM_PTABLE_OFF QCOM_SMEM_REGION_SIZE - 0x1000 
-
-#define SMEM_GLOBAL_HOST	0xfffe
+#define QCOM_SMEM_REGION_SIZE 0x200000
 
 
 #define QCOM_SMEM_NAME "qcom-smem"
-#define TYPE_QCOM_SMEM "qcom-smem-type"
+#define TYPE_QCOM_SMEM "qcom-smem-type" //needed by OBJECT_DECLARE_TYPE_SIMPLE
 
 
 struct QcomSmemState{
@@ -231,29 +217,6 @@ struct smem_private_entry {
 	__le32 reserved;
 };
 #define SMEM_PRIVATE_CANARY	0xa5a5
-
-
-
-/*
-version index 
-
-if header->version[SMEM_MASTER_SBL_VERSION_INDEX] == LEGACY_ALLOCATOR then use the legacy allocator
-if header->version[SMEM_MASTER_SBL_VERSION_INDEX] == MODERN_ALLOCATOR then use the modern allocator 
-*/
-#define SMEM_MASTER_SBL_VERSION_INDEX 7
-#define SMEM_GLOBAL_HEAP_VERSION	11
-#define SMEM_GLOBAL_PART_VERSION	12
-
-#define SMEM_GLOBAL_HEAP_VERNUM SMEM_GLOBAL_HEAP_VERSION << 16
-#define SMEM_GLOBAL_PART_VERNUM  SMEM_GLOBAL_PART_VERSION << 16 
-
-
-static struct smem_info smem_info = {
-	.magic = SMEM_INFO_MAGIC,
-	.size = QCOM_SMEM_REGION_SIZE,
-	.base_addr = QCOM_SMEM_REGION_BASE,
-	.num_items = 0,
-};
 
 
 OBJECT_DECLARE_SIMPLE_TYPE(QcomSmemState, QCOM_SMEM)

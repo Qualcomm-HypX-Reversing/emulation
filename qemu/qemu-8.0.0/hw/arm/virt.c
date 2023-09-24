@@ -2030,6 +2030,7 @@ static void virt_cpu_post_init(VirtMachineState *vms, MemoryRegion *sysmem)
 /*
 This function supports creating anonymous s2 mappings for regions that the qualcomm SoC needs. 
 */
+/*
 static void create_qualcomm_soc_regions(void){
     MemoryRegion* mr = g_malloc0(sizeof(*mr));
     Error* e = 0;
@@ -2048,7 +2049,7 @@ static void create_qualcomm_soc_regions(void){
     memory_region_init_ram(mr, NULL, "clock_region2", CLOCK_REGION_SIZE, &e);
     memory_region_add_subregion(get_system_memory(), CLOCK_REGION_BASE2, mr);
     
-}
+}*/
 
 
 
@@ -2360,7 +2361,7 @@ static void machvirt_init(MachineState *machine)
                                vms->fw_cfg, OBJECT(vms));
     }
 
-    create_qualcomm_soc_regions();
+    //create_qualcomm_soc_regions();
 
     vms->bootinfo.ram_size = machine->ram_size;
     vms->bootinfo.board_id = -1;
