@@ -1381,9 +1381,10 @@ bool memory_region_access_valid(MemoryRegion *mr,
     if (mr->ops->valid.accepts
         && !mr->ops->valid.accepts(mr->opaque, addr, size, is_write, attrs)) {
         qemu_log_mask(LOG_GUEST_ERROR, "Invalid %s at addr 0x%" HWADDR_PRIX
-                      ", size %u, region '%s', reason: rejected\n",
+                      ", size %u, region '%s', reason: rejected, MR: %p\n",
                       is_write ? "write" : "read",
-                      addr, size, memory_region_name(mr));
+                      addr, size, memory_region_name(mr), mr);
+        qemu_log_mask(LOG_GUEST_ERROR, "host: %p\n", (void*)mr->addr);
         goto err_print_pc;
     }
 

@@ -1,6 +1,7 @@
 target remote localhost:1234
 # vbar_el2 + 0x200 (Same EL, sync)
 b *0x80093200
+b *0x80093400
 # faulting function
 #b *0x8005e32c 
 #faulting insn
@@ -11,12 +12,12 @@ b *0x80093200
 #b *0x80057f60
 #smem_error_function
 
-b *0x80065d24
 
 #return from first smc
 #b *0x800435f0 
 
 #b *0x80063b40
+
 
 set $log=0x80209200 
 define goto_rkp

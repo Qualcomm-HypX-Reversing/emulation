@@ -1260,6 +1260,7 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
          * so our choice is to always raise the fault.
          */
         if (param.tsz_oob) {
+            qemu_log("TRANSLATION FAULT OOB\n");
             goto do_translation_fault;
         }
 
@@ -1305,6 +1306,7 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
                                            addrsize - inputsize);
         if (-top_bits != param.select) {
             /* The gap between the two regions is a Translation fault */
+            qemu_log("TRANSLATION FAULT TOP BITS\n");
             goto do_translation_fault;
         }
     }
@@ -1331,6 +1333,7 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
          * Translation table walk disabled => Translation fault on TLB miss
          * Note: This is always 0 on 64-bit EL2 and EL3.
          */
+         qemu_log("TRANSLATION FAULT EPD\n");
         goto do_translation_fault;
     }
 
@@ -1353,6 +1356,7 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
                                             inputsize, stride);
         if (startlevel == INT_MIN) {
             level = 0;
+            qemu_log("TRANSLATION FAULT START LEVEL\n");
             goto do_translation_fault;
         }
         level = startlevel;
@@ -1426,10 +1430,16 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
         ptw->in_ptw_idx &= ~1;
         ptw->in_secure = false;
     }
+
+    
+    //qemu_log("desc: %p\n", (char*)descaddr);
+    
+
     if (!S1_ptw_translate(env, ptw, descaddr, fi)) {
         goto do_fault;
     }
     descriptor = arm_ldq_ptw(env, ptw, fi);
+    qemu_log("loaded desc: %p\n", (char*)descriptor);
     if (fi->type != ARMFault_None) {
         goto do_fault;
     }
@@ -1438,6 +1448,7 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
  restart_atomic_update:
     if (!(descriptor & 1) || (!(descriptor & 2) && (level == 3))) {
         /* Invalid, or the Reserved level 3 encoding */
+        qemu_log("TRANSLATION FAULT ENCODING, level: %d\n", level);
         goto do_translation_fault;
     }
 
@@ -1613,13 +1624,19 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
         result->cacheattrs.shareability = extract32(attrs, 8, 2);
     }
 
+
+    qemu_log("Final physical address: %p\n", (char*)descaddr);
+    qemu_log("____________\n");
+
     result->f.phys_addr = descaddr;
     result->f.lg_page_size = ctz64(page_size);
     return false;
 
  do_translation_fault:
+    qemu_log("TRANSLATION FAULT\n");
     fi->type = ARMFault_Translation;
  do_fault:
+    qemu_log("FAULT: %d\n", fi->type);
     fi->level = level;
     /* Tag the error as S2 for failed S1 PTW at S2 or ordinary S2.  */
     fi->stage2 = fi->s1ptw || regime_is_stage2(mmu_idx);
@@ -2833,7 +2850,7 @@ static bool get_phys_addr_with_struct(CPUARMState *env, S1Translate *ptw,
      * to secure.
      */
     result->f.attrs.secure = is_secure;
-
+    //this functin sets the next page table walk for this address lookup
     switch (mmu_idx) {
     case ARMMMUIdx_Phys_S:
     case ARMMMUIdx_Phys_NS:
@@ -2841,9 +2858,10 @@ static bool get_phys_addr_with_struct(CPUARMState *env, S1Translate *ptw,
         return get_phys_addr_disabled(env, address, access_type, mmu_idx,
                                       is_secure, result, fi);
 
-    case ARMMMUIdx_Stage1_E0:
+    case ARMMMUIdx_Stage1_E0: //if we are EL1/0, we have a stage2
     case ARMMMUIdx_Stage1_E1:
     case ARMMMUIdx_Stage1_E1_PAN:
+        qemu_log("Walking page tables for EL1 Address: %p\n", (char*)address);
         /* First stage lookup uses second stage for ptw. */
         ptw->in_ptw_idx = is_secure ? ARMMMUIdx_Stage2_S : ARMMMUIdx_Stage2;
         break;
@@ -2870,7 +2888,7 @@ static bool get_phys_addr_with_struct(CPUARMState *env, S1Translate *ptw,
         }
         /* fall through */
 
-    default:
+    default: //for EL2, EL3 we have no virtualization
         /* Single stage and second stage uses physical for ptw. */
         ptw->in_ptw_idx = is_secure ? ARMMMUIdx_Phys_S : ARMMMUIdx_Phys_NS;
         break;
