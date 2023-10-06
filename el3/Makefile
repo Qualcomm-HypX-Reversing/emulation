@@ -18,6 +18,9 @@ bin/printf.o : src/printf.c
 bin/main.o : src/main.c
 	$(CROSS_PREFIX)gcc $(CFLAGS) -c $< -o $@
 
+bin/page_tables.o : src/page_tables.c
+	$(CROSS_PREFIX)gcc $(CFLAGS) -c $< -o $@
+
 $(INCLUDE)/assembly-constants.h :
 	gcc -I $(INCLUDE) -o bin/gen_asm_constants tools/gen_asm_constants.c 
 	bin/gen_asm_constants
@@ -25,7 +28,7 @@ $(INCLUDE)/assembly-constants.h :
 bin/excp.o : src/excp.S 
 	$(CROSS_PREFIX)as $(ASMFLAGS) -c $< -o $@
 
-el3_firmware.elf : bin/entry.o bin/printf.o bin/main.o bin/excp.o
+el3_firmware.elf : bin/entry.o bin/printf.o bin/main.o bin/excp.o bin/page_tables.o
 	$(CROSS_PREFIX)ld -T linker.ld $^ -o $@
 
 clean :

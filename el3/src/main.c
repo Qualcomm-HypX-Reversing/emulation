@@ -4,6 +4,7 @@
 #include "cpu_state.h"
 #include "smccc.h"
 #include "psci.h"
+#include "page_tables.h"
 extern void start_hyp(uint64_t kernel_start, uint64_t should_be_2);
 
 extern void start_kernel();
@@ -46,7 +47,7 @@ uint64_t handle_smc(struct cpu_state* cs){
     }
 
     if(call_code == 0xfaded){ //0xfaded indicates that the hypervisor is ready for fuzzing
-        VMMap_SLAT(KERNEL_START, 0x4000);
+        VMMap_SLAT(KERNEL_START, 0x8000);
         VMMap_SLAT(0x09000000, 0x1000); //map uart printf for kernel
         start_kernel();
 
@@ -121,138 +122,6 @@ void write_constants(){
     /*int* memory_attr_arr_size = (int*)0x80090f7c;
     *memory_attr_arr_size = 0;*/
 }
-
-#define CUSTOM_PAGE_TABLE_BASE (0xc0000000L)
-#define TTBR0_EL2 (0xb3800000L)
-#define VTTBR_EL2 (0xb3808000L)
-
-#define PAGE_SIZE (0x1000) //both SLAT and S1 use 4 KiB gran
-
-#define PA_SIZE (36) //the PA size is 36 bit for both SLAT and S1
-
-#define DESC_MASK (((1L << PA_SIZE) - 1) & ~(PAGE_SIZE - 1)) 
-
-#define DESC_TO_TABLE(desc) (desc & DESC_MASK)
-
-#define S2_SIZE (1<<12) //the number of bytes that a single stage 2 descriptor covers
-#define S2_MASK (~(S2_SIZE-1))
-#define S2_INDEX(addr) ((addr >> 12) & 511)
-
-
-#define S1_SIZE (1<<21) //the amount of bytes that a single stage 1 descriptor covers
-#define S1_MASK (~(S1_SIZE-1))
-#define S1_INDEX(addr) ((addr >> 21) & 511)
-
-#define S0_SIZE (1<<30) //the amount that a single stage 0 descriptor covers
-#define S0_MASK (~(S0_SIZE-1))
-#define S0_INDEX(addr) ((addr >> 30) & 511)
- 
-#define S0_ADDR_END(addr,end)                                  \
-({                                                              \
-    unsigned long __boundary = ((addr + S0_SIZE) & S0_MASK);    \
-    (__boundary-1 < (end) - 1) ? __boundary : end;               \
-})
-
-#define S1_ADDR_END(addr,end)                                  \
-({                                                              \
-    unsigned long __boundary = ((addr + S1_SIZE) & S1_MASK);    \
-    (__boundary-1 < (end) - 1) ? __boundary : end;               \
-})
-
-#define S2_ADDR_END(addr,end)                                  \
-({                                                              \
-    unsigned long __boundary = ((addr + S2_SIZE) & S2_MASK);    \
-    (__boundary-1 < (end) - 1) ? __boundary : end;               \
-})
-
-#define GET_DESC_ADDR(addr) (addr & S2_MASK)
-
-#define PAGE_ATTRIBUTES (0b11)
-#define PTE_ATTRIBUTES (0x747)
-
-unsigned long page_table_index = CUSTOM_PAGE_TABLE_BASE;
-
-unsigned long read_from_phys(unsigned long addr){
-    return *(unsigned long*)addr;
-}
-
-void write_to_phys(unsigned long addr, unsigned long val){
-    *(unsigned long*)addr = val;
-}
-
-unsigned long get_next_page_table_index(){
-    unsigned long ret = page_table_index;
-    page_table_index += 4096;
-    return ret;
-}
-
-
-void remap_s2_mapping(unsigned long addr, unsigned long end, unsigned long s1_desc_addr, unsigned long page_attributes, unsigned long pte_attributes){ 
-    unsigned long s2_table = DESC_TO_TABLE(read_from_phys(s1_desc_addr)); //desc_addr is the address of the stage 1 table
-    if(!s2_table) {
-        write_to_phys(s1_desc_addr, get_next_page_table_index() | page_attributes);
-        s2_table = read_from_phys(s1_desc_addr) & (~page_attributes);
-    }
-
-    s2_table += (S2_INDEX(addr) * 8);
-    unsigned long next = 0;
-    do{
-        next = S2_ADDR_END(addr, end); //S2_ADDR_END should return the virtual address of the next s2 descriptor if we need to map it
-        write_to_phys(s2_table, addr | pte_attributes);
-
-    }while(s2_table += 8, addr = next, addr != end);
-
-}
-
-//addr is the address to start mapping from
-//end is the address after the last to map
-//s0_addr is the address of the stage 0 descriptor
-void remap_s1_mapping(unsigned long addr, unsigned long end, unsigned long s0_desc_addr, unsigned long page_attributes, unsigned long pte_attributes){ 
-    unsigned long s1_table = DESC_TO_TABLE(read_from_phys(s0_desc_addr)); //desc_addr is the address of the stage 1 table
-    if(!s1_table) {
-        write_to_phys(s0_desc_addr, get_next_page_table_index() | page_attributes);
-        s1_table = read_from_phys(s0_desc_addr) & (~page_attributes);
-    }
-
-
-    s1_table += (S1_INDEX(addr) * 8);
-    unsigned long next = 0;
-    do{
-
-        next = S1_ADDR_END(addr, end); //S1_ADDR_END should return the virtual address of the next s1 descriptor if we need to map it
-        remap_s2_mapping(addr, next, s1_table, page_attributes, pte_attributes);
-    }while(s1_table += 8, addr =  next, addr != end);
-
-}
-
-//the hypervisor uses 36 bit page tables
-//basically a blatant copy of remap_pfn_range/ioremap
-void VMMap(unsigned long addr, unsigned long size){ //create page table mappings for a region
-    unsigned long end = addr + size;
-    unsigned long s0_table = TTBR0_EL2;
-    s0_table += (S0_INDEX(addr) * 8); //address of the s0 desc
-    unsigned long next = 0;
-    do {
-        next = S0_ADDR_END(addr, end); //S0_ADDR_END should return the virtual address of the next s0 desc if we need to map. If the final address is in this desc, then return that as the end will be at a lower granualarity
-        remap_s1_mapping(addr, next, s0_table, PAGE_ATTRIBUTES, PTE_ATTRIBUTES);
-    }while(s0_table+=8, addr = next, addr != end);
-}
-
-
-#define SLAT_PTE_ATTRIBUTES 0x4ff
-#define SLAT_PAGE_ATTRIBUTES 0b00000011
-
-void VMMap_SLAT(unsigned long addr, unsigned long size){
-    unsigned long end = addr + size;
-    unsigned long s0_table = VTTBR_EL2;
-    s0_table += (S0_INDEX(addr) * 8);
-    unsigned long next = 0;
-    do {
-        next = S0_ADDR_END(addr, end); //S0_ADDR_END should return the virtual address of the next s0 desc we need to map. If the final address is in this desc, then return that as the end will be at a lower granualarity
-        remap_s1_mapping(addr, next, s0_table, SLAT_PAGE_ATTRIBUTES, SLAT_PTE_ATTRIBUTES);
-    }while(s0_table+=8, addr = next, addr != end);
-}
-
 
 
 void smem_mapping_setup(){

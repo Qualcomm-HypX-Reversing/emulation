@@ -20,6 +20,7 @@ b *0x80093400
 
 
 set $log=0x80209200 
+set $rkp_log=0xB0200000
 define goto_rkp
     set $pc=0x8000ce68
     set $x0=0xc300c000
@@ -28,3 +29,8 @@ end
 define print_log
     printf "%s", $log
 end
+
+define print_rkp_log
+    printf "%s", $rkp_log
+end
+
