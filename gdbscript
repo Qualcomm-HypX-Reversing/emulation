@@ -12,6 +12,7 @@ b *0x80093400
 #b *0x80057f60
 #smem_error_function
 
+b *0x800074e8
 
 #return from first smc
 #b *0x800435f0 

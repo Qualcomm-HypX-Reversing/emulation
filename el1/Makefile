@@ -1,7 +1,7 @@
 CROSS_PREFIX := aarch64-linux-gnu-
 INCLUDE := include 
 ASMFLAGS := -I $(INCLUDE) -g
-CFLAGS := -I $(INCLUDE) -g -ffreestanding
+CFLAGS := -I $(INCLUDE) -g -ffreestanding -mcpu=cortex-a57+nosimd
 
 
 

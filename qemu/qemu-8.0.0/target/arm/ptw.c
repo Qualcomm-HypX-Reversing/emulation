@@ -17,6 +17,13 @@
 
 
 typedef struct S1Translate {
+    /**
+    For more information on this struct, read here: https://elixir.bootlin.com/qemu/v8.1.2/source/target/arm/ptw.c#L21
+
+    In short in_mmu_idx describes the current mmu we are using. This ultimately determines things such as the current ttbr and the current tcr
+
+    The in_ptw_idx on the other hand determines the address of space of the page table descriptors. For example, if we are in stage1 then the address space of the descriptors is the IPA (Stage 2). if we are in stage2 then the address space of the decriprtors is the physical address space. 
+    */
     ARMMMUIdx in_mmu_idx;
     ARMMMUIdx in_ptw_idx;
     bool in_secure;
@@ -213,6 +220,8 @@ static bool S2_attrs_are_device(uint64_t hcr, uint8_t attrs)
 }
 
 /* Translate a S1 pagetable walk through S2 if needed.  */
+
+//This function will either return the host address of the physical address or perform the second stage walk
 static bool S1_ptw_translate(CPUARMState *env, S1Translate *ptw,
                              hwaddr addr, ARMMMUFaultInfo *fi)
 {
@@ -1435,7 +1444,7 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
     //qemu_log("desc: %p\n", (char*)descaddr);
     
 
-    if (!S1_ptw_translate(env, ptw, descaddr, fi)) {
+    if (!S1_ptw_translate(env, ptw, descaddr, fi)) { //translate the descaddr via stage1
         goto do_fault;
     }
     descriptor = arm_ldq_ptw(env, ptw, fi);
@@ -2850,7 +2859,7 @@ static bool get_phys_addr_with_struct(CPUARMState *env, S1Translate *ptw,
      * to secure.
      */
     result->f.attrs.secure = is_secure;
-    //this functin sets the next page table walk for this address lookup
+    //this function sets the next page table walk for this address lookup
     switch (mmu_idx) {
     case ARMMMUIdx_Phys_S:
     case ARMMMUIdx_Phys_NS:
