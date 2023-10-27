@@ -41,7 +41,8 @@ int main(){
 
     uh_call(UH_APP_INIT, 0, 0, 0, 0, 0);
     //uh_call(UH_PREFIX | 95,0xdeadbeef,0xdeadbeef,0xdeadb00b,0x11c001,0xfaded); overflow
-    uh_call(UH_APP_INIT, 2, EL1_LOAD, 0x20000, 1, 0); //voffset and physaddr start are probably the same
+    uh_call(UH_APP_INIT, 2, EL1_LOAD, 0x4000000, 1, 0); //voffset and physaddr start are probably the same
+  //  uh_call(UH_APP_INIT, 2, EL1_LOAD+0x1000, 0x4000000+0x1000, 1, 0); //voffset and physaddr start are probably the same
 
 
     unsigned long param_1 = (unsigned long)&region;

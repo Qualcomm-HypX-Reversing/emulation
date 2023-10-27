@@ -15,6 +15,52 @@
 #include "internals.h"
 #include "idau.h"
 
+/**
+
+Explanation of page table walk:
+
+The process for walking the page tables is fairly complex in QEMU. To access memory we typically use a memory access function such as arm_ldq_ptw or arm_ldl_code. These typically take in some kind of address. 
+
+Eventually we will end up at some kind of function such as probe_access_internal or mmu_lookup1. These actually perform the mmu lookup for us. Before we call this function, however, we always have to set up the mmu_idx. As seen below, this is what actually describes where to start. Typically this is ARMMMUIdx_E[el][0]_[ttbr number]. Note that if the name has Stage in it, then it is reserved for page table walks.
+
+At this point we can actually begin the page table walk. This really occurs in get_phys_addr_with_struct. 
+
+For the purposes of this explanation, we will only be considering the EL0/1 walk as the rest are trivial to extend. 
+
+For a el0/el1 walk we set our mmu_idx to one of our stages and we jump to get_phys_addr_twostage. This function will actually do the two stage translation as it does va->ipa and ipa->pa in two steps. Note that if stage2 is disabled, it skips the step entirely.
+
+From get_phys_addr_twostage, we once again call get_phys_addr_with_struct to perform the actual walking. From here, we actually do the work.
+
+The first thing we do is set our ptw_idx (The address space of the descriptors) to stage2 as ttbr0_el1 and ttbr1_el1 are both IPAs. 
+
+We then check if the address space translation is disabled for that regime. If it is then we return as the address as it is actually the real physical address.
+
+If it is not, we go into get_phys_addr_lpae. This actually does lpae translation. 
+
+From here, we walk through the page tables. The only part that really matters is the next-level section
+
+in that part there are 3 key stages. The first part we get the index for that stage walk and get the ipa/pa of the descriptor.
+
+In the second stage we run S1_ptw_translate which does the second stage translation. This second stage translation will perform the exact same steps from the top except on a on a 1 lower mmu_idx/ptw_idx. 
+
+We repeat steps 1 and 2 until we translate the full address.
+
+At the end of all of this, we set res->f.phys_addr equal to the address that we translated. 
+
+
+Once we get the IPA, we perform the same steps again except the mmu_idx is stage2 and the ptw_idx is phys mem.
+
+At this point we have a real physical address. All we need to do is translate it to a host address. This is done in tlb_set_page_full which translates the physical address to a host address. This host address is then stored in the TLB. 
+
+
+Some notes on the TLB:
+
+The TLB is a structure in QEMU that is essentially an array within the CPUArchState. The TLB essentially uses a very simplistic hashcode system in which they essentially hash the address. The TLB is per-mmu-idx, so each mmu_idx has a TLB which maps the physical address to the virtual address for that mmu_idx
+
+
+*/
+
+
 
 typedef struct S1Translate {
     /**
@@ -2843,6 +2889,8 @@ static bool get_phys_addr_twostage(CPUARMState *env, S1Translate *ptw,
     return false;
 }
 
+
+
 static bool get_phys_addr_with_struct(CPUARMState *env, S1Translate *ptw,
                                       target_ulong address,
                                       MMUAccessType access_type,
@@ -2892,6 +2940,7 @@ static bool get_phys_addr_with_struct(CPUARMState *env, S1Translate *ptw,
         ptw->in_mmu_idx = mmu_idx = s1_mmu_idx;
         if (arm_feature(env, ARM_FEATURE_EL2) &&
             !regime_translation_disabled(env, ARMMMUIdx_Stage2, is_secure)) {
+                
             return get_phys_addr_twostage(env, ptw, address, access_type,
                                           result, fi);
         }
