@@ -33,7 +33,7 @@ From get_phys_addr_twostage, we once again call get_phys_addr_with_struct to per
 
 The first thing we do is set our ptw_idx (The address space of the descriptors) to stage2 as ttbr0_el1 and ttbr1_el1 are both IPAs. 
 
-We then check if the address space translation is disabled for that regime. If it is then we return as the address as it is actually the real physical address.
+We then check if the address space translation is disabled for that regime. If it is then we return as the address as it is actually the real physical address (Or IPA). This operates on the mmu_idx as that is the current translation regime. 
 
 If it is not, we go into get_phys_addr_lpae. This actually does lpae translation. 
 
@@ -41,12 +41,11 @@ From here, we walk through the page tables. The only part that really matters is
 
 in that part there are 3 key stages. The first part we get the index for that stage walk and get the ipa/pa of the descriptor.
 
-In the second stage we run S1_ptw_translate which does the second stage translation. This second stage translation will perform the exact same steps from the top except on a on a 1 lower mmu_idx/ptw_idx. 
+In the second stage we run S1_ptw_translate which does the second stage translation. This second stage translation will perform the exact same steps from the top except on a on a 1 lower mmu_idx/ptw_idx. Note that during the run in S1_ptw_translate, we will call S1_ptw_translate again however that will functionally be a nop as we are in the physical address space. S1_ptw_translate also retrieves the host address of the translation. For example, if we were walking through stage 1 tables (i.e., translating stage1->stage2), it would walk through the stage2 tables and retrieve the host address of the desrcriptor. 
 
 We repeat steps 1 and 2 until we translate the full address.
 
 At the end of all of this, we set res->f.phys_addr equal to the address that we translated. 
-
 
 Once we get the IPA, we perform the same steps again except the mmu_idx is stage2 and the ptw_idx is phys mem.
 
@@ -55,9 +54,50 @@ At this point we have a real physical address. All we need to do is translate it
 
 Some notes on the TLB:
 
-The TLB is a structure in QEMU that is essentially an array within the CPUArchState. The TLB essentially uses a very simplistic hashcode system in which they essentially hash the address. The TLB is per-mmu-idx, so each mmu_idx has a TLB which maps the physical address to the virtual address for that mmu_idx
+The TLB is a structure in QEMU that is essentially an array within the CPUArchState. The TLB essentially uses a very simplistic hashcode system in which they essentially hash the address. The TLB is per-mmu-idx, so each mmu_idx has a TLB which maps the physical address to the virtual address for that mmu_idx. So, the stage2 mmu idx has IPA->PAs while the stag1 mmu_idx has VAs->PAs
 
+https://elixir.bootlin.com/qemu/v8.0.0/source/accel/tcg/cputlb.c#L1237
 
+The addend is the difference between the physical address  of the VM and the real address in memory
+
+*/
+
+/**
+
+Some resources: 
+
+https://developer.arm.com/documentation/100942/0100/Hypervisor-software
+https://developer.arm.com/documentation/102418/0101/TrustZone-in-the-processor/Secure-virtualization
+
+Stage 1 translation example:
+
+Suppose we want to load code (arm_ldl_code) from some VA. The following will happen:
+
+First, we will check if we are in the TLB: https://elixir.bootlin.com/qemu/v8.0.0/source/accel/tcg/cputlb.c#L1951. If we are in the victim TLB or the normal TLB then we move on and return the correct value.
+
+If we don't then we call tlb_fill which attempts to fill that mmu_idx's tlb for that address (Which in this case, is a vaddr).
+
+Eventually, walking through it, we will hit get_phys_addr_twostage which will actually perform the translation.
+
+Firstly, we must translate the s1->s2 or the virtual address to the IPA. To do this, we call get_phys_addr_with_struct on the s1. 
+
+This is by far the most complex stage. Note, we do not a have TLB here. When walking through S1, we call get_phys_addr_lpae as we are using lpae mode. We then start with relevant ttbrx_el1 and add the stage 0 index. Do note that the value in ttbrx_el1 is an IPA. 
+
+To get the stage 0 descriptor, we have to translate the IPA to a host address. To do this, we call S1_ptw_translate which takes our IPA and converts it to a PA. To do this, we walk through the entire stage2 mapping. To do this, we call probe_access_full with an mmu_idx of Stage2 and a ptw index of the physical address space (Secure or Non-Secure). 
+
+probe_access_full will also check the TLB to see if an ipa -> pa mapping exists for that ipa. If it does not, we have to walk the stage 2 mappings. At this point, we perform the exact same stages as the S1->S2 except we start with v[s]ttbr_el2. Note that when we are walking, we once again call S1_ptw_translate. In this case, we are passing in a genuine physical address. So, S1_ptw_translate will actually just translate the physical address to a host address. 
+
+At this point, we continually perform this translation until we get the pa associated with the IPA passed in by stage1. Once we get that PA, the TLB function arm_cpu_tlb_fill will get the host address associated with the physical address and fill in the host address.
+
+At this point, we are once again in the original call of S1_ptw_translate for s1->s2 and we have the host address of the descriptor. So, we simply load that and we have the stage 0 descriptor!
+
+We continually repeat this process until we get the IPA (Do note that get_phys_addr_with_struct does not return host address, only the page aligned physical address - i.e., the PFN). 
+
+Once we have the IPA, we translate that to a physical address and then we are done. We return the address to fill_tlb which fills up the TLB and we move on. 
+
+**FOCUS ON THE LAST TRANSLATION LEVEL**
+
+ 
 */
 
 
@@ -66,9 +106,9 @@ typedef struct S1Translate {
     /**
     For more information on this struct, read here: https://elixir.bootlin.com/qemu/v8.1.2/source/target/arm/ptw.c#L21
 
-    In short in_mmu_idx describes the current mmu we are using. This ultimately determines things such as the current ttbr and the current tcr
+    In short in_mmu_idx describes the current mmu we are using. This ultimately determines things such as the current ttbr and the current tcr. The mmu_idx is also the address space of the virtual address (out_virt). So, whether or not it is a va, ipa, or pa.
 
-    The in_ptw_idx on the other hand determines the address of space of the page table descriptors. For example, if we are in stage1 then the address space of the descriptors is the IPA (Stage 2). if we are in stage2 then the address space of the decriprtors is the physical address space. 
+    The in_ptw_idx on the other hand determines the address of space of the page table descriptors. For example, if we are in stage1 then the address space of the descriptors is the IPA (Stage 2). if the virtual address is stage2 (An IPA) then the address space of the decriprtors is the physical address space. 
     */
     ARMMMUIdx in_mmu_idx;
     ARMMMUIdx in_ptw_idx;

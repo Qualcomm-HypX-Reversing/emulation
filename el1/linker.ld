@@ -13,11 +13,9 @@ SECTIONS
     . = ALIGN(8);
     . = . + 0x2000; /* 2 page of stack memory */
     stack_top = .;
-    pgd = .;
-    . = . + 0x1000;
-    page_allocator_start = .;
-    . = . + 0x10000; /*allocate some memory for the page allocator if needed*/
-    page_allocator_end  = .;
+    . = ALIGN(0x1000);
+    _heap = .;
+    . = . + 0x200000;
 
 
 }

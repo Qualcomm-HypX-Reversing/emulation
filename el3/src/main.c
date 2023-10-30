@@ -47,7 +47,7 @@ uint64_t handle_smc(struct cpu_state* cs){
     }
 
     if(call_code == 0xfaded){ //0xfaded indicates that the hypervisor is ready for fuzzing
-        VMMap_SLAT(KERNEL_START, 0x8000);
+        VMMap_SLAT(KERNEL_START, 0x210000);
         VMMap_SLAT(0x09000000, 0x1000); //map uart printf for kernel
         start_kernel();
 
@@ -127,7 +127,7 @@ void write_constants(){
 void smem_mapping_setup(){
     VMMap(0x80900000L, 0x200000); //map smem
     VMMap(0xc0000000L, 0x200000); //map page table memory
-    VMMap(KERNEL_START, 0x20000); //map el1 firmware
+    VMMap(KERNEL_START, 0x210000); //map el1 firmware
 }
 
 void patch(){
